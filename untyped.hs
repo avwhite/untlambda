@@ -56,26 +56,24 @@ pTerm ctx = pAbs ctx <|> pApp ctx
 pPar ctx = between (char '(') (char ')') (pTerm ctx)
 
 pVar ctx = do
-	name <- lower
-	let brujin = elemIndex [name] ctx
+	name <- many1 lower
+	let brujin = elemIndex name ctx
 	maybe (fail "Unbound var") (return . TmVar) brujin
 
 pAbs ctx = do
 	char '\\'
-	b <- lower
+	b <- many1 lower
 	char '.' >>  many space
-	t <- pTerm ([b]:ctx)
-	return (TmAbs [b] t)
+	t <- pTerm (b:ctx)
+	return (TmAbs b t)
 
 pApp ctx = do
-	apps <- many1 (pVar ctx <|> pPar ctx)
+	apps <- sepBy1 (pAbs ctx <|> pVar ctx <|> pPar ctx) spaces
 	return $ foldl1 TmApp apps
-
-stdCtx = ["a","b","c","x","y","z"]
 
 repl = forever $ do
 	line <- getLine
-	case (parse (pTerm stdCtx) line line) of
+	case (parse (pTerm []) line line) of
 		(Right r) -> do
 			putStrLn . fmtTerm [] . recEval $ r
 		(Left r) -> putStrLn (show r)
