@@ -102,7 +102,7 @@ repl ctxNames ctx = do
 			(putStrLn . fmtTerm ctxNames . recEval) (ctx term)
 			repl ctxNames ctx
 		(Right (Just name, term)) -> do
-			let term' = (recEval term)
+			let term' = (recEval (ctx term))
 			repl (name:ctxNames) (ctx . contextWrap name term')
 		(Left r) -> putStrLn (show r) >> repl ctxNames ctx
 
