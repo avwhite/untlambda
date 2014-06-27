@@ -1,9 +1,13 @@
+{-# LANGUAGE TupleSections #-}
+
 import Text.Parsec hiding (many, (<|>))
 import Text.Parsec.String
 import Data.List
 import Data.Maybe
 import Control.Applicative
 import Control.Monad
+
+---Data and formatting
 
 data Term =
 	TmVar Int |
@@ -23,6 +27,8 @@ fmtTerm ctx (TmAbs name t1) =
 		(name', ctx') = pickFreshName ctx name
 fmtTerm ctx (TmApp t1 t2) = fmtTerm ctx t1 ++ " " ++ fmtTerm ctx t2
 fmtTerm ctx (TmVar x) = ctx !! x
+
+---Evaluation
 
 shift :: Int -> Int -> Term -> Term
 shift d c (TmVar x)
@@ -50,6 +56,19 @@ recEval (TmApp t1 t2) = recEval $ TmApp (recEval t1) t2
 recEval t = t
 
 -------Parser
+
+pInLine :: Context -> Parser (Maybe String, Term)
+pInLine ctx = (pAssign ctx <|> fmap (Nothing,) (pTerm ctx))
+
+pAssign ctx = do
+	char ':'
+	name <- many1 lower
+	spaces
+	char '='
+	spaces
+	term <- pTerm ctx
+	return (Just name, term)
+
 pTerm :: Context -> Parser Term
 pTerm ctx = pAbs ctx <|> pApp ctx
 
@@ -58,7 +77,7 @@ pPar ctx = between (char '(') (char ')') (pTerm ctx)
 pVar ctx = do
 	name <- many1 lower
 	let brujin = elemIndex name ctx
-	maybe (fail "Unbound var") (return . TmVar) brujin
+	maybe (fail  $ "Unbound var: " ++ name) (return . TmVar) brujin
 
 pAbs ctx = do
 	char '\\'
@@ -71,11 +90,20 @@ pApp ctx = do
 	apps <- sepBy1 (pAbs ctx <|> pVar ctx <|> pPar ctx) spaces
 	return $ foldl1 TmApp apps
 
-repl = forever $ do
-	line <- getLine
-	case (parse (pTerm []) line line) of
-		(Right r) -> do
-			putStrLn . fmtTerm [] . recEval $ r
-		(Left r) -> putStrLn (show r)
+---REPL
 
-main = repl
+contextWrap name ctxTerm term  = TmApp (TmAbs name term) ctxTerm
+
+repl :: Context -> (Term -> Term) -> IO ()
+repl ctxNames ctx = do
+	line <- getLine
+	case (parse (pInLine ctxNames) line line) of
+		(Right (Nothing, term)) -> do
+			(putStrLn . fmtTerm ctxNames . recEval) (ctx term)
+			repl ctxNames ctx
+		(Right (Just name, term)) -> do
+			let term' = (recEval term)
+			repl (name:ctxNames) (ctx . contextWrap name term')
+		(Left r) -> putStrLn (show r) >> repl ctxNames ctx
+
+main = repl [] id
