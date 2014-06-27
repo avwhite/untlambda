@@ -28,34 +28,7 @@ fmtTerm ctx (TmAbs name t1) =
 fmtTerm ctx (TmApp t1 t2) = fmtTerm ctx t1 ++ " " ++ fmtTerm ctx t2
 fmtTerm ctx (TmVar x) = ctx !! x
 
----Evaluation
-
-shift :: Int -> Int -> Term -> Term
-shift d c (TmVar x)
-	| x < c = TmVar x
-	| x >= c = TmVar (x + d)
-shift d c (TmAbs name t) = TmAbs name (shift d (c+1) t)
-shift d c (TmApp t1 t2) = TmApp (shift d c t1) (shift d c t2)
-
-subst :: Int -> Term -> Term -> Term
-subst j s (TmVar x)
-	| x == j = s
-	| otherwise = TmVar x
-subst j s (TmAbs name t) = TmAbs name (subst (j+1) (shift 1 0 s) t)
-subst j s (TmApp t1 t2) = TmApp (subst j s t1) (subst j s t2)
-
-isValue :: Term -> Bool
-isValue (TmAbs _ _) = True
-isValue _ = False
-
-recEval :: Term -> Term
-recEval (TmApp (TmAbs name t1) t2)
-	| isValue t2 = recEval $ shift (-1) 0 (subst 0 (shift 1 0 t2) t1)
-	| otherwise = recEval $ TmApp (TmAbs name t1) (recEval t2)
-recEval (TmApp t1 t2) = recEval $ TmApp (recEval t1) t2
-recEval t = t
-
--------Parser
+---Parser
 
 pInLine :: Context -> Parser (Maybe String, Term)
 pInLine ctx = (pAssign ctx <|> fmap (Nothing,) (pTerm ctx))
@@ -89,6 +62,33 @@ pAbs ctx = do
 pApp ctx = do
 	apps <- sepBy1 (pAbs ctx <|> pVar ctx <|> pPar ctx) spaces
 	return $ foldl1 TmApp apps
+
+---Evaluation
+
+shift :: Int -> Int -> Term -> Term
+shift d c (TmVar x)
+	| x < c = TmVar x
+	| x >= c = TmVar (x + d)
+shift d c (TmAbs name t) = TmAbs name (shift d (c+1) t)
+shift d c (TmApp t1 t2) = TmApp (shift d c t1) (shift d c t2)
+
+subst :: Int -> Term -> Term -> Term
+subst j s (TmVar x)
+	| x == j = s
+	| otherwise = TmVar x
+subst j s (TmAbs name t) = TmAbs name (subst (j+1) (shift 1 0 s) t)
+subst j s (TmApp t1 t2) = TmApp (subst j s t1) (subst j s t2)
+
+isValue :: Term -> Bool
+isValue (TmAbs _ _) = True
+isValue _ = False
+
+recEval :: Term -> Term
+recEval (TmApp (TmAbs name t1) t2)
+	| isValue t2 = recEval $ shift (-1) 0 (subst 0 (shift 1 0 t2) t1)
+	| otherwise = recEval $ TmApp (TmAbs name t1) (recEval t2)
+recEval (TmApp t1 t2) = recEval $ TmApp (recEval t1) t2
+recEval t = t
 
 ---REPL
 
