@@ -6,6 +6,7 @@ import Data.List
 import Data.Maybe
 import Control.Applicative
 import Control.Monad
+import Control.Monad.Reader
 
 ---Data and formatting
 
@@ -16,17 +17,19 @@ data Term =
 
 type Context = [String]
 
-pickFreshName ctx name
-	| name `elem` ctx = pickFreshName ctx (name ++ "'")
+pickFreshName name ctx
+	| name `elem` ctx = pickFreshName (name ++ "'") ctx
 	| otherwise = (name, name:ctx)
 
-fmtTerm :: Context -> Term -> String
-fmtTerm ctx (TmAbs name t1) =
-	"(\\" ++ name' ++ "." ++ fmtTerm ctx' t1 ++ ")"
-	where
-		(name', ctx') = pickFreshName ctx name
-fmtTerm ctx (TmApp t1 t2) = fmtTerm ctx t1 ++ " " ++ fmtTerm ctx t2
-fmtTerm ctx (TmVar x) = ctx !! x
+fmtTerm :: Term -> Reader Context String
+fmtTerm (TmAbs name t1) = do
+	(name', ctx) <- asks (pickFreshName name)
+	return "(\\" ++ name' ++ "." ++ local (fmtTerm t1) ctx ++ ")"
+fmtTerm (TmApp t1 t2) = do
+	first <- fmtTerm t1
+	second <- fmtTerm t2
+	return (first ++ " " ++ second)
+fmtTerm (TmVar x) = asks (!! x)
 
 ---Parser
 
