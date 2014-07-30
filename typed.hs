@@ -19,13 +19,10 @@ data Term =
 
 data Ty =
 	TyBool |
-	TyArr Ty Ty deriving Show
+	TyArr Ty Ty deriving (Show, Eq)
 
 type Context = [String]
-type TyContext = [(String, Ty)]
-
-eraseCtxTypes :: TyContext -> Context
-eraseCtxTypes = fmap fst
+type TyContext = [Ty]
 
 pickFreshName ctx name
 	| name `elem` ctx = pickFreshName ctx (name ++ "'")
@@ -101,6 +98,31 @@ pTyBool = string "Bool" >> return TyBool
 
 pTyPar = between (char '(') (char ')') pType
 
+---Type checking
+
+typeof :: TyContext -> Term -> Maybe Ty
+typeof ctx (TmVar x) = return $ ctx !! x
+typeof ctx (TmAbs x t ty) = do
+	ty2 <- typeof (ty:ctx) t
+	return $ TyArr ty ty2
+typeof ctx (TmApp t1 t2) = do
+	ty1 <- typeof ctx t1
+	ty2 <- typeof ctx t2
+	case ty1 of
+		(TyArr ty11 ty12) ->
+			if ty2 /= ty11 then Nothing else
+				return ty12
+		_ -> Nothing
+typeof ctx TmTrue = return TyBool
+typeof ctx TmFalse = return TyBool
+typeof ctx (TmTest t1 t2 t3) = do
+	ty1 <- typeof ctx t1
+	ty2 <- typeof ctx t2
+	ty3 <- typeof ctx t3
+	if ty1 /= TyBool then Nothing else
+		if ty2 /= ty3 then Nothing else
+			return ty2
+
 ---Evaluation
 
 shift :: Int -> Int -> Term -> Term
@@ -145,18 +167,24 @@ recEval t = t
 
 ---REPL
 
-contextWrap name ctxTerm term  = TmApp (TmAbs name term TyBool) ctxTerm
+contextWrap name ctxTerm ty term  = TmApp (TmAbs name term ty) ctxTerm
 
 repl :: Context -> (Term -> Term) -> IO ()
 repl ctxNames ctx = do
 	line <- getLine
 	case (parse (pInLine ctxNames) line line) of
-		(Right (Nothing, term)) -> do
-			(putStrLn . fmtTerm ctxNames . recEval) (ctx term)
-			repl ctxNames ctx
-		(Right (Just name, term)) -> do
-			let term' = (recEval (ctx term))
-			repl (name:ctxNames) (ctx . contextWrap name term')
+		(Right (Nothing, term)) ->
+			case typeof [] (ctx term) of
+				(Just ty) -> do
+					(putStrLn . fmtTerm ctxNames . recEval) (ctx term)
+					repl ctxNames ctx
+				Nothing -> putStrLn "Type error" >> repl ctxNames ctx
+		(Right (Just name, term)) ->
+			case typeof [] (ctx term) of
+				(Just ty) -> do
+					let term' = (recEval (ctx term))
+					repl (name:ctxNames) (ctx . contextWrap name term' ty)
+				Nothing -> putStrLn "Type error" >> repl ctxNames ctx
 		(Left r) -> putStrLn (show r) >> repl ctxNames ctx
 
 main = repl [] id
