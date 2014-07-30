@@ -11,21 +11,29 @@ import Control.Monad
 
 data Term =
 	TmVar Int |
-	TmAbs String Term |
+	TmAbs String Term Ty |
 	TmApp Term Term |
 	TmTest Term Term Term |
 	TmTrue |
 	TmFalse 
 
+data Ty =
+	TyBool |
+	TyArr Ty Ty deriving Show
+
 type Context = [String]
+type TyContext = [(String, Ty)]
+
+eraseCtxTypes :: TyContext -> Context
+eraseCtxTypes = fmap fst
 
 pickFreshName ctx name
 	| name `elem` ctx = pickFreshName ctx (name ++ "'")
 	| otherwise = (name, name:ctx)
 
 fmtTerm :: Context -> Term -> String
-fmtTerm ctx (TmAbs name t1) =
-	"(\\" ++ name' ++ "." ++ fmtTerm ctx' t1 ++ ")"
+fmtTerm ctx (TmAbs name t1 ty) =
+	"(\\" ++ name' ++ ":" ++ show ty ++ "." ++ fmtTerm ctx' t1 ++ ")"
 	where
 		(name', ctx') = pickFreshName ctx name
 fmtTerm ctx (TmApp t1 t2) = fmtTerm ctx t1 ++ " " ++ fmtTerm ctx t2
@@ -72,9 +80,11 @@ pVar ctx = do
 pAbs ctx = do
 	char '\\'
 	b <- many1 lower
+	char ':'
+	ty <- pType
 	char '.' >>  many space
 	t <- pTerm (b:ctx)
-	return (TmAbs b t)
+	return (TmAbs b t ty)
 
 pTest ctx = TmTest <$>
 	((string "If" >> spaces) *> pTerm ctx <* spaces) <*>
@@ -83,13 +93,21 @@ pTest ctx = TmTest <$>
 
 pBool ctx = (string "True" *> pure TmTrue) <|> (string "False" *> pure TmFalse)
 
+pType = do
+	arrs <- sepBy1 (pTyBool <|> pTyPar) (string "->")
+	return $ foldr1 TyArr arrs
+
+pTyBool = string "Bool" >> return TyBool
+
+pTyPar = between (char '(') (char ')') pType
+
 ---Evaluation
 
 shift :: Int -> Int -> Term -> Term
 shift d c (TmVar x)
 	| x < c = TmVar x
 	| x >= c = TmVar (x + d)
-shift d c (TmAbs name t) = TmAbs name (shift d (c+1) t)
+shift d c (TmAbs name t ty) = TmAbs name (shift d (c+1) t) ty
 shift d c (TmApp t1 t2) = TmApp (shift d c t1) (shift d c t2)
 shift d c (TmTest t1 t2 t3) = TmTest
 	(shift d c t1)
@@ -101,7 +119,7 @@ subst :: Int -> Term -> Term -> Term
 subst j s (TmVar x)
 	| x == j = s
 	| otherwise = TmVar x
-subst j s (TmAbs name t) = TmAbs name (subst (j+1) (shift 1 0 s) t)
+subst j s (TmAbs name t ty) = TmAbs name (subst (j+1) (shift 1 0 s) t) ty
 subst j s (TmApp t1 t2) = TmApp (subst j s t1) (subst j s t2)
 subst j s (TmTest t1 t2 t3) = TmTest
 	(subst j s t2)
@@ -110,15 +128,15 @@ subst j s (TmTest t1 t2 t3) = TmTest
 subst j s x = x
 
 isValue :: Term -> Bool
-isValue (TmAbs _ _) = True
+isValue (TmAbs _ _ _) = True
 isValue TmTrue = True
 isValue TmFalse = True
 isValue _ = False
 
 recEval :: Term -> Term
-recEval (TmApp (TmAbs name t1) t2)
+recEval (TmApp (TmAbs name t1 ty) t2)
 	| isValue t2 = recEval $ shift (-1) 0 (subst 0 (shift 1 0 t2) t1)
-	| otherwise = recEval $ TmApp (TmAbs name t1) (recEval t2)
+	| otherwise = recEval $ TmApp (TmAbs name t1 ty) (recEval t2)
 recEval (TmApp t1 t2) = recEval $ TmApp (recEval t1) t2
 recEval (TmTest TmTrue t2 t3) = recEval t2
 recEval (TmTest TmFalse t2 t3) = recEval t3
@@ -127,7 +145,7 @@ recEval t = t
 
 ---REPL
 
-contextWrap name ctxTerm term  = TmApp (TmAbs name term) ctxTerm
+contextWrap name ctxTerm term  = TmApp (TmAbs name term TyBool) ctxTerm
 
 repl :: Context -> (Term -> Term) -> IO ()
 repl ctxNames ctx = do
