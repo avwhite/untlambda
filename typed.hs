@@ -80,7 +80,7 @@ pAbs ctx = do
 	char ':'
 	ty <- pType
 	char '.' >>  many space
-	t <- pTerm (b:ctx)
+	t <- pApp (b:ctx)
 	return (TmAbs b t ty)
 
 pTest ctx = TmTest <$>
