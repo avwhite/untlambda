@@ -1,1 +1,1 @@
-Work in progress haskell implementation of various forms of lambda calculus. Currently untyped lambda calculus is done and simply typed lambda calculus (with booleans) is in progress.
+Work in progress haskell implementation of various forms of lambda calculus. Currently untyped lambda calculus and simply typed lambda calculus (with booleans) is are done. Simply typed lambda calculus with booleans, integers and general recursion is in progress.
