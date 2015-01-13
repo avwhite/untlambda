@@ -19,7 +19,7 @@ data Term =
 	TmZero |
 	TmSucc Term |
 	TmPred Term |
-	TmIsZero Term 
+	TmIsZero Term  deriving (Show)
 
 data Ty =
 	TyBool |
@@ -179,6 +179,9 @@ shift d c (TmTest t1 t2 t3) = TmTest
 	(shift d c t1)
 	(shift d c t2)
 	(shift d c t3)
+shift d c (TmSucc t) = (TmSucc (shift d c t))
+shift d c (TmPred t) = (TmPred (shift d c t))
+shift d c (TmIsZero t) = (TmIsZero (shift d c t))
 shift d c x = x
 
 subst :: Int -> Term -> Term -> Term
@@ -191,6 +194,9 @@ subst j s (TmTest t1 t2 t3) = TmTest
 	(subst j s t2)
 	(subst j s t2)
 	(subst j s t3)
+subst j s (TmSucc t) = TmSucc (subst j s t)
+subst j s (TmPred t) = TmPred (subst j s t)
+subst j s (TmIsZero t) = TmIsZero (subst j s t)
 subst j s x = x
 
 isNumValue :: Term -> Bool
