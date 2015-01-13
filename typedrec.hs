@@ -218,7 +218,7 @@ recEval (TmApp t1 t2) = recEval $ TmApp (recEval t1) t2
 recEval (TmTest TmTrue t2 t3) = recEval t2
 recEval (TmTest TmFalse t2 t3) = recEval t3
 recEval (TmTest t1 t2 t3) = recEval $ TmTest (recEval t1) t2 t3
-recEval (TmSucc t) = recEval $ TmSucc (recEval t)
+recEval (TmSucc t) = TmSucc (recEval t)
 recEval (TmPred TmZero) = TmZero
 recEval (TmPred t)
 	| isNumValue t = recEval $ unSucc t --Since t is a numeric value and not zero it must be a TmSucc
