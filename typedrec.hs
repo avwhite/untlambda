@@ -41,12 +41,12 @@ fmtTerm ctx (TmAbs name t1 ty) =
 fmtTerm ctx (TmApp t1 t2) = fmtTerm ctx t1 ++ " " ++ fmtTerm ctx t2
 fmtTerm ctx (TmVar x) = ctx !! x
 fmtTerm ctx (TmTest t1 t2 t3) = "If " ++ fmtTerm ctx t1 ++ " Then " ++ fmtTerm ctx t2 ++ " Else " ++ fmtTerm ctx t3
-fmtTerm ctx TmTrue = "True"
-fmtTerm ctx TmFalse = "False"
-fmtTerm ctx TmZero = "0"
-fmtTerm ctx (TmSucc t) = "Succ " ++ fmtTerm ctx t
-fmtTerm ctx (TmPred t) = "Pred " ++ fmtTerm ctx t
-fmtTerm ctx (TmIsZero t) = "Iszero " ++ fmtTerm ctx t
+fmtTerm ctx TmTrue = "true"
+fmtTerm ctx TmFalse = "false"
+fmtTerm ctx TmZero = "z"
+fmtTerm ctx (TmSucc t) = "succ " ++ fmtTerm ctx t
+fmtTerm ctx (TmPred t) = "pred " ++ fmtTerm ctx t
+fmtTerm ctx (TmIsZero t) = "isz " ++ fmtTerm ctx t
 
 ---Parser
 
@@ -74,13 +74,8 @@ pApp ctx = do
 --applications we have the pPar parser
 pTerm :: Context -> Parser Term
 pTerm ctx =
-	try (pBool ctx) <|>
 	try (pTest ctx) <|>
 	try (pAbs ctx) <|>
-	try (pZero ctx) <|>
-	try (pSucc ctx) <|>
-	try (pPred ctx) <|>
-	try (pIsZero ctx) <|>
 	try (pVar ctx) <|>
 	try (pPar ctx)
 
@@ -105,16 +100,6 @@ pTest ctx = TmTest <$>
 	((string "If" >> spaces) *> pTerm ctx <* spaces) <*>
 	((string "Then" >> spaces) *> pTerm ctx <* spaces) <*>
 	((string "Else" >> spaces) *> pTerm ctx)
-
-pBool ctx = (string "True" *> pure TmTrue) <|> (string "False" *> pure TmFalse)
-
-pZero ctx = char '0' >> return TmZero
-
-pSucc ctx = string "Succ " >> TmSucc <$> pTerm ctx
-
-pPred ctx = string "Pred " >> TmPred <$> pTerm ctx
-
-pIsZero ctx = string "IsZero " >> TmIsZero <$> pTerm ctx
 
 pType = do
 	arrs <- sepBy1 (pTyBool <|> pTyPar <|> pTyNat) (string "->")
@@ -239,6 +224,26 @@ recEval t = t
 
 contextWrap name ctxTerm ty term  = TmApp (TmAbs name term ty) ctxTerm
 
+startCtx =
+	(contextWrap "succ"
+		(TmAbs "n" (TmSucc (TmVar 0)) TyNat)
+		(TyArr TyNat TyNat)) 
+	. (contextWrap "pred"
+		(TmAbs "n" (TmPred (TmVar 0)) TyNat)
+		(TyArr TyNat TyNat)) 
+	. (contextWrap "isz"
+		(TmAbs "n" (TmIsZero (TmVar 0)) TyNat)
+		(TyArr TyNat TyBool))
+	. (contextWrap "zero"
+		TmZero
+		TyNat)
+	. (contextWrap "false"
+		TmFalse
+		TyBool)
+	. (contextWrap "true"
+		TmTrue
+		TyBool)
+
 repl :: Context -> (Term -> Term) -> IO ()
 repl ctxNames ctx = do
 	line <- getLine
@@ -257,4 +262,4 @@ repl ctxNames ctx = do
 				Nothing -> putStrLn "Type error" >> repl ctxNames ctx
 		(Left r) -> putStrLn (show r) >> repl ctxNames ctx
 
-main = repl [] id
+main = repl ["true", "false", "z", "isz", "pred","succ"] startCtx
