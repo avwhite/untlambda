@@ -176,7 +176,7 @@ subst j s (TmVar x)
 subst j s (TmAbs name t ty) = TmAbs name (subst (j+1) (shift 1 0 s) t) ty
 subst j s (TmApp t1 t2) = TmApp (subst j s t1) (subst j s t2)
 subst j s (TmTest t1 t2 t3) = TmTest
-	(subst j s t2)
+	(subst j s t1)
 	(subst j s t2)
 	(subst j s t3)
 subst j s (TmSucc t) = TmSucc (subst j s t)
