@@ -19,7 +19,8 @@ data Term =
 	TmZero |
 	TmSucc Term |
 	TmPred Term |
-	TmIsZero Term  deriving (Show)
+	TmIsZero Term |
+	TmFix Term deriving (Show)
 
 data Ty =
 	TyBool |
@@ -47,20 +48,27 @@ fmtTerm ctx TmZero = "z"
 fmtTerm ctx (TmSucc t) = "succ " ++ fmtTerm ctx t
 fmtTerm ctx (TmPred t) = "pred " ++ fmtTerm ctx t
 fmtTerm ctx (TmIsZero t) = "isz " ++ fmtTerm ctx t
+fmtTerm ctx (TmFix t) = "lolwut"
 
 ---Parser
 
 pInLine :: Context -> Parser (Maybe String, Term)
 pInLine ctx = (pAssign ctx <|> fmap (Nothing,) (pApp ctx))
 
+--This shit is recursive... hopefully
 pAssign ctx = do
-	char ':'
+	string "letrec"
+	spaces
 	name <- many1 lower
+	spaces
+	char ':'
+	spaces
+	ty <- pType
 	spaces
 	char '='
 	spaces
-	term <- pApp ctx
-	return (Just name, term)
+	term <- pApp (name:ctx)
+	return (Just name, TmFix (TmAbs name term ty))
 
 --pApp is the top level parser. Every term is some for of application.
 --Even if there is no application at all, it will be parsed as 'something'
@@ -151,6 +159,11 @@ typeof ctx (TmIsZero t) = do
 	case ty of
 		TyNat -> return TyBool
 		_ -> Nothing
+typeof ctx (TmFix t) = do
+	ty <- typeof ctx t
+	case ty of
+		TyArr t1 t2 -> if t1 == t2 then return t1 else Nothing
+		_ -> Nothing
 
 ---Evaluation
 
@@ -167,6 +180,7 @@ shift d c (TmTest t1 t2 t3) = TmTest
 shift d c (TmSucc t) = (TmSucc (shift d c t))
 shift d c (TmPred t) = (TmPred (shift d c t))
 shift d c (TmIsZero t) = (TmIsZero (shift d c t))
+shift d c (TmFix t) = (TmFix (shift d c t))
 shift d c x = x
 
 subst :: Int -> Term -> Term -> Term
@@ -182,6 +196,7 @@ subst j s (TmTest t1 t2 t3) = TmTest
 subst j s (TmSucc t) = TmSucc (subst j s t)
 subst j s (TmPred t) = TmPred (subst j s t)
 subst j s (TmIsZero t) = TmIsZero (subst j s t)
+subst j s (TmFix t) = TmFix (subst j s t)
 subst j s x = x
 
 isNumValue :: Term -> Bool
@@ -218,6 +233,9 @@ recEval (TmIsZero TmZero) = TmTrue
 recEval (TmIsZero t)
 	| isNumValue t = TmFalse
 	| otherwise = recEval $ TmIsZero (recEval t)
+recEval (TmFix (TmAbs name t ty)) =
+	recEval $ subst 0 (TmFix (TmAbs name t ty)) t
+recEval (TmFix t) = recEval $ TmFix (recEval t)
 recEval t = t
 
 ---REPL
@@ -257,7 +275,7 @@ repl ctxNames ctx = do
 		(Right (Just name, term)) ->
 			case typeof [] (ctx term) of
 				(Just ty) -> do
-					let term' = (recEval (ctx term))
+					let term' = recEval $ ctx term
 					repl (name:ctxNames) (ctx . contextWrap name term' ty)
 				Nothing -> putStrLn "Type error" >> repl ctxNames ctx
 		(Left r) -> putStrLn (show r) >> repl ctxNames ctx
