@@ -6,6 +6,7 @@ import Data.List
 import Data.Maybe
 import Control.Applicative
 import Control.Monad
+import System.Console.Readline
 
 ---Data and formatting
 
@@ -264,7 +265,7 @@ startCtx =
 
 repl :: Context -> (Term -> Term) -> IO ()
 repl ctxNames ctx = do
-	line <- getLine
+	(Just line) <- readline ">"
 	case (parse (pInLine ctxNames) line line) of
 		(Right (Nothing, term)) ->
 			case typeof [] (ctx term) of
