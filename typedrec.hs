@@ -8,25 +8,10 @@ import Control.Applicative
 import Control.Monad
 import System.Console.Readline
 
+import Parser
+import Tokenizer
+
 ---Data and formatting
-
-data Term =
-	TmVar Int |
-	TmAbs String Term Ty |
-	TmApp Term Term |
-	TmTest Term Term Term |
-	TmTrue |
-	TmFalse |
-	TmZero |
-	TmSucc Term |
-	TmPred Term |
-	TmIsZero Term |
-	TmFix Term deriving (Show)
-
-data Ty =
-	TyBool |
-	TyArr Ty Ty |
-	TyNat deriving (Show, Eq)
 
 type Context = [String]
 type TyContext = [Ty]
@@ -50,75 +35,6 @@ fmtTerm ctx (TmSucc t) = "succ " ++ fmtTerm ctx t
 fmtTerm ctx (TmPred t) = "pred " ++ fmtTerm ctx t
 fmtTerm ctx (TmIsZero t) = "isz " ++ fmtTerm ctx t
 fmtTerm ctx (TmFix t) = "lolwut"
-
----Parser
-
-pInLine :: Context -> Parser (Maybe String, Term)
-pInLine ctx = (pAssign ctx <|> fmap (Nothing,) (pApp ctx))
-
---This shit is recursive... hopefully
-pAssign ctx = do
-	string "letrec"
-	spaces
-	name <- many1 lower
-	spaces
-	char ':'
-	spaces
-	ty <- pType
-	spaces
-	char '='
-	spaces
-	term <- pApp (name:ctx)
-	return (Just name, TmFix (TmAbs name term ty))
-
---pApp is the top level parser. Every term is some for of application.
---Even if there is no application at all, it will be parsed as 'something'
---applied to nothing.
-pApp ctx = do
-	apps <- sepBy1 (pTerm ctx) spaces
-	return $ foldl1 TmApp apps
-
---What we call a Term is actuall every term which is not an application.
---This is to avoid left recursion in the pApp parser. To allow for nested 
---applications we have the pPar parser
-pTerm :: Context -> Parser Term
-pTerm ctx =
-	try (pTest ctx) <|>
-	try (pAbs ctx) <|>
-	try (pVar ctx) <|>
-	try (pPar ctx)
-
---This parser allows for nested applications.
-pPar ctx = between (char '(') (char ')') (pApp ctx)
-
-pVar ctx = do
-	name <- many1 lower
-	let brujin = elemIndex name ctx
-	maybe (fail  $ "Unbound var: " ++ name) (return . TmVar) brujin
-
-pAbs ctx = do
-	char '\\'
-	b <- many1 lower
-	char ':'
-	ty <- pType
-	char '.' >>  many space
-	t <- pApp (b:ctx)
-	return (TmAbs b t ty)
-
-pTest ctx = TmTest <$>
-	((string "If" >> spaces) *> pTerm ctx <* spaces) <*>
-	((string "Then" >> spaces) *> pTerm ctx <* spaces) <*>
-	((string "Else" >> spaces) *> pTerm ctx)
-
-pType = do
-	arrs <- sepBy1 (pTyBool <|> pTyPar <|> pTyNat) (string "->")
-	return $ foldr1 TyArr arrs
-
-pTyBool = string "Bool" >> return TyBool
-
-pTyNat = string "Nat" >> return TyNat
-
-pTyPar = between (char '(') (char ')') pType
 
 ---Type checking
 
@@ -266,19 +182,18 @@ startCtx =
 repl :: Context -> (Term -> Term) -> IO ()
 repl ctxNames ctx = do
 	(Just line) <- readline ">"
-	case (parse (pInLine ctxNames) line line) of
-		(Right (Nothing, term)) ->
+	case (lambdaParse . alexScanTokens $ line) ctxNames of
+		(Nothing, term) -> putStrLn (show term) >>
 			case typeof [] (ctx term) of
 				(Just ty) -> do
 					(putStrLn . fmtTerm ctxNames . recEval) (ctx term)
 					repl ctxNames ctx
 				Nothing -> putStrLn "Type error" >> repl ctxNames ctx
-		(Right (Just name, term)) ->
+		(Just name, term) -> putStrLn (show term) >>
 			case typeof [] (ctx term) of
 				(Just ty) -> do
 					let term' = recEval $ ctx term
 					repl (name:ctxNames) (ctx . contextWrap name term' ty)
 				Nothing -> putStrLn "Type error" >> repl ctxNames ctx
-		(Left r) -> putStrLn (show r) >> repl ctxNames ctx
 
-main = repl ["true", "false", "z", "isz", "pred","succ"] startCtx
+main = repl ["true", "false", "z", "isz", "pred", "succ"] startCtx
