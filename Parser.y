@@ -28,20 +28,24 @@ import Data.List
 %%
 
 InLine
-	: let identifier ':' Type '=' Term
+	: let identifier ':' Type '=' Juxt
 		{\ctx -> (Just $2, TmFix (TmAbs $2 ($6 ($2:ctx)) $4))}
-	| Term
+	| Juxt
 		{\ctx -> (Nothing, $1 ctx)}
 
-Term
-	: lam identifier ':' Type '.' Term
-		{\ctx -> TmAbs $2 ($6 ($2:ctx)) $4}
-	| '(' Term ')'
-		{$2}
-	| if Term then Term else Term
-		{\ctx -> TmTest ($2 ctx) ($4 ctx) ($6 ctx)}
-	| Term Term
+Juxt
+	: Juxt Term
 		{\ctx -> TmApp ($1 ctx) ($2 ctx)}
+	| Term
+		{$1}
+
+Term
+	: lam identifier ':' Type '.' Juxt
+		{\ctx -> TmAbs $2 ($6 ($2:ctx)) $4}
+	| '(' Juxt ')'
+		{$2}
+	| if Juxt then Juxt else Juxt
+		{\ctx -> TmTest ($2 ctx) ($4 ctx) ($6 ctx)}
 	| identifier
 		{
 		\ctx -> maybe
@@ -57,6 +61,8 @@ Type
 		{TyBool}
 	| Type '->' Type
 		{TyArr $1 $3}
+	| '(' Type ')'
+		{$2}
 
 
 {
