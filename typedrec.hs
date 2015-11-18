@@ -1,4 +1,5 @@
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 import Text.Parsec hiding (many, (<|>))
 import Text.Parsec.String
